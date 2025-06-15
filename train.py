@@ -8,6 +8,11 @@ import torch.nn.functional as F
 
 from torch.utils.data import DataLoader
 
+# 安装 ptflops（如果没安装的话）
+os.system("pip install -q ptflops")
+
+from ptflops import get_model_complexity_info
+
 from common.meter import Meter
 from common.utils import detect_grad_nan, compute_accuracy, set_seed, setup_run
 from models.dataloader.samplers import CategoriesSampler
@@ -22,8 +27,7 @@ def train(epoch, model, loader, optimizer, args=None):
     train_loader = loader['train_loader']
     train_loader_aux = loader['train_loader_aux']
 
-    # label for query set, always in the same pattern
-    label = torch.arange(args.way).repeat(args.query).cuda()  # 012340123401234...
+    label = torch.arange(args.way).repeat(args.query).cuda()
 
     loss_meter = Meter()
     acc_meter = Meter()
@@ -32,23 +36,19 @@ def train(epoch, model, loader, optimizer, args=None):
     tqdm_gen = tqdm.tqdm(train_loader)
 
     for i, ((data, train_labels), (data_aux, train_labels_aux)) in enumerate(zip(tqdm_gen, train_loader_aux), 1):
-
         data, train_labels = data.cuda(), train_labels.cuda()
         data_aux, train_labels_aux = data_aux.cuda(), train_labels_aux.cuda()
 
-        # Forward images (3, 84, 84) -> (C, H, W)
         model.module.mode = 'encoder'
         data = model(data)
-        data_aux = model(data_aux)  # I prefer to separate feed-forwarding data and data_aux due to BN
+        data_aux = model(data_aux)
 
-        # loss for batch
         model.module.mode = 'cca'
         data_shot, data_query = data[:k], data[k:]
         logits, absolute_logits = model((data_shot.unsqueeze(0).repeat(args.num_gpu, 1, 1, 1, 1), data_query))
         epi_loss = F.cross_entropy(logits, label)
         absolute_loss = F.cross_entropy(absolute_logits, train_labels[k:])
 
-        # loss for auxiliary batch
         model.module.mode = 'fc'
         logits_aux = model(data_aux)
         loss_aux = F.cross_entropy(logits_aux, train_labels_aux)
@@ -85,7 +85,6 @@ def train_main(args):
     valset = Dataset('val', args)
     val_sampler = CategoriesSampler(valset.label, args.val_episode, args.way, args.shot + args.query)
     val_loader = DataLoader(dataset=valset, batch_sampler=val_sampler, num_workers=8, pin_memory=True)
-    ''' fix val set for all epochs '''
     val_loader = [x for x in val_loader]
 
     set_seed(args.seed)
@@ -95,6 +94,21 @@ def train_main(args):
     if not args.no_wandb:
         wandb.watch(model)
     print(model)
+
+    # ------------------ Params & FLOPs 统计 ------------------
+    model.module.mode = 'encoder'
+    dummy_input_shape = (3, 84, 84)  # 根据你的数据分辨率调整
+    with torch.cuda.device(0):
+        macs, params = get_model_complexity_info(
+            model.module, dummy_input_shape,
+            as_strings=True,
+            print_per_layer_stat=False,
+            verbose=False
+        )
+    print(f"[Model Complexity] Params: {params} | FLOPs: {macs}")
+    if not args.no_wandb:
+        wandb.log({'model/Params': params, 'model/FLOPs': macs})
+    # --------------------------------------------------------
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, nesterov=True, weight_decay=0.0005)
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones, gamma=args.gamma)
@@ -109,7 +123,12 @@ def train_main(args):
         val_loss, val_acc, _ = evaluate(epoch, model, val_loader, args, set='val')
 
         if not args.no_wandb:
-            wandb.log({'train/loss': train_loss, 'train/acc': train_acc, 'val/loss': val_loss, 'val/acc': val_acc}, step=epoch)
+            wandb.log({
+                'train/loss': train_loss,
+                'train/acc': train_acc,
+                'val/loss': val_loss,
+                'val/acc': val_acc
+            }, step=epoch)
 
         if val_acc > max_acc:
             print(f'[ log ] *********A better model is found ({val_acc:.3f}) *********')
@@ -132,7 +151,6 @@ def train_main(args):
 
 if __name__ == '__main__':
     args = setup_run(arg_mode='train')
-
     model = train_main(args)
     test_acc, test_ci = test_main(model, args)
 
