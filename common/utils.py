@@ -156,7 +156,7 @@ def parse_args(arg_mode):
     parser.add_argument('-test_episode', type=int, default=2000, help='number of testing episodes after training')
 
     ''' about SA '''
-    parser.add_argument('-self_method', type=str, default='sa')
+    parser.add_argument('-self_method', type=str, default='scr')
 
     ''' about CA '''
     parser.add_argument('-temperature_attn', type=float, default=5.0, metavar='gamma', help='temperature for softmax in computing cross-attention')
