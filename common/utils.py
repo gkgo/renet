@@ -19,7 +19,7 @@ def setup_run(arg_mode='train'):
     ensure_path(args.save_path)
 
     if not args.no_wandb:
-        wandb.init(project=f'renet-{args.dataset}-{args.way}w{args.shot}s',
+        wandb.init(project=f'SCNet-{args.dataset}-{args.way}w{args.shot}s',
                    config=args,
                    save_code=True,
                    name=args.extra_dir)
@@ -34,8 +34,8 @@ def setup_run(arg_mode='train'):
         args.num_class = 351
     elif args.dataset == 'cifar_fs':
         args.num_class = 64
-    elif args.dataset == 'cars':
-        args.num_class = 130
+    elif args.dataset == 'mini':
+        args.num_class = 10
     elif args.dataset == 'dogs':
         args.num_class = 70
 
@@ -132,20 +132,20 @@ def parse_args(arg_mode):
     parser = argparse.ArgumentParser(description='Relational Embedding for Few-Shot Classification (ICCV 2021)')
 
     ''' about dataset '''
-    parser.add_argument('-dataset', type=str, default='miniimagenet',
-                        choices=['miniimagenet', 'cub', 'tieredimagenet', 'cifar_fs'])
+    parser.add_argument('-dataset', type=str, default='mini',
+                        choices=['miniimagenet', 'cub', 'tieredimagenet', 'cifar_fs','mini'])
     parser.add_argument('-data_dir', type=str, default='datasets', help='dir of datasets')
 
     ''' about training specs '''
-    parser.add_argument('-batch', type=int, default=128, help='auxiliary batch size')
-    parser.add_argument('-temperature', type=float, default=0.2, metavar='tau', help='temperature for metric-based loss')
-    parser.add_argument('-lamb', type=float, default=0.25, metavar='lambda', help='loss balancing term')
+    parser.add_argument('-batch', type=int, default=1, help='auxiliary batch size')
+    parser.add_argument('-temperature', type=float, default=0.20, metavar='tau', help='temperature for metric-based loss')
+    parser.add_argument('-lamb', type=float, default=0.50, metavar='lambda', help='loss balancing term')
 
     ''' about training schedules '''
-    parser.add_argument('-max_epoch', type=int, default=80, help='max epoch to run')
+    parser.add_argument('-max_epoch', type=int, default=100, help='max epoch to run')
     parser.add_argument('-lr', type=float, default=0.1, help='learning rate')
     parser.add_argument('-gamma', type=float, default=0.05, help='learning rate decay factor')
-    parser.add_argument('-milestones', nargs='+', type=int, default=[60, 70], help='milestones for MultiStepLR')
+    parser.add_argument('-milestones', nargs='+', type=int, default=[80,90], help='milestones for MultiStepLR')
     parser.add_argument('-save_all', action='store_true', help='save models on each epoch')
 
     ''' about few-shot episodes '''
@@ -155,16 +155,16 @@ def parse_args(arg_mode):
     parser.add_argument('-val_episode', type=int, default=200, help='number of validation episode')
     parser.add_argument('-test_episode', type=int, default=2000, help='number of testing episodes after training')
 
-    ''' about SCR '''
-    parser.add_argument('-self_method', type=str, default='scr')
+    ''' about SA '''
+    parser.add_argument('-self_method', type=str, default='sa')
 
-    ''' about CCA '''
+    ''' about CA '''
     parser.add_argument('-temperature_attn', type=float, default=5.0, metavar='gamma', help='temperature for softmax in computing cross-attention')
 
     ''' about env '''
     parser.add_argument('-gpu', default='0', help='the GPU ids e.g. \"0\", \"0,1\", \"0,1,2\", etc')
-    parser.add_argument('-extra_dir', type=str, default='test222', help='extra dir name added to checkpoint dir')
-    parser.add_argument('-seed', type=int, default=1, help='random seed')
+    parser.add_argument('-extra_dir', type=str, default='111', help='extra dir name added to checkpoint dir')
+    parser.add_argument('-seed', type=int, default=42, help='random seed')
     parser.add_argument('-no_wandb', action='store_true', help='not plotting learning curve on wandb',
                         default=arg_mode == 'test')  # train: enable logging / test: disable logging
     args = parser.parse_args()
